@@ -1,0 +1,9 @@
+{
+  "event_id": "092106-008-sample-001",
+  "event_type": "LOT_ACCEPTED",
+  "aggregate_type": "ingredient_lot",
+  "aggregate_id": "local_mooncake_chain-001",
+  "occurred_at": "2026-09-20T15:00:00+08:00",
+  "version": 1,
+  "summary": "登记乡味月饼协作账的首条领域记录"
+}
