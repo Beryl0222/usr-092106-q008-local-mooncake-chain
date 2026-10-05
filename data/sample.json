@@ -1,9 +1,15 @@
 {
-  "event_id": "092106-008-sample-001",
-  "event_type": "LOT_ACCEPTED",
-  "aggregate_type": "ingredient_lot",
-  "aggregate_id": "local_mooncake_chain-001",
-  "occurred_at": "2026-09-20T15:00:00+08:00",
+  "event_id": "SUP-S01#1",
+  "event_type": "SUPPLIER_REGISTERED",
+  "aggregate_type": "supplier",
+  "aggregate_id": "SUP-S01",
+  "occurred_at": "2026-09-01T09:00:00+08:00",
   "version": 1,
-  "summary": "登记乡味月饼协作账的首条领域记录"
+  "summary": "登记花生仁供应户（最小联调样例）",
+  "payload": {
+    "name": "王秀兰",
+    "village": "屯城村",
+    "supplies": ["花生仁"],
+    "bank_account_last4": "1032"
+  }
 }

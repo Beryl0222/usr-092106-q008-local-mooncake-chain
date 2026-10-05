@@ -1,5 +1,12 @@
 [project]
 name = "local-mooncake-chain"
-version = "0.1.0"
-description = "领域事件基础校验"
+version = "0.2.0"
+description = "乡味月饼产销协作：事件契约、双向追溯、过敏原标签、产能重排与一次付款结算"
 requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["jsonschema>=4"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

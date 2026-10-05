@@ -1,6 +1,7 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "乡味月饼协作账领域事件",
+  "$schema": "https://json-schema.org/2020-12/schema",
+  "title": "乡味月饼协作账领域事件契约",
+  "description": "屯昌多工坊产销协作的事件约定。事件一经接收即不可原地改写，更正只能追加后继事件。所有跨工坊引用的标识均为字符串，由本契约统一命名。",
   "type": "object",
   "required": [
     "event_id",
@@ -14,24 +15,57 @@
   "properties": {
     "event_id": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "事件全局唯一标识，建议 日期-工坊序号-类型-序号。"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "业务幂等键，例如线下称重单号或工时补录单号；同一键只接受一次。"
     },
     "event_type": {
       "type": "string",
       "enum": [
-        "LOT_ACCEPTED",
-        "SHIFT_RECORDED",
+        "SUPPLIER_REGISTERED",
+        "WORKSHOP_QUALIFIED",
+        "INGREDIENT_LOT_RECEIVED",
+        "INGREDIENT_LOT_INSPECTED",
+        "INGREDIENT_LOT_QUARANTINED",
+        "RECIPE_VERSION_PUBLISHED",
+        "PRODUCTION_SHIFT_OPENED",
+        "PRODUCTION_SHIFT_CLOSED",
+        "BATCH_PRODUCED",
+        "BATCH_ALLERGEN_LABEL_FIXED",
         "BATCH_RELEASED",
-        "ORDER_REALLOCATED",
-        "RECALL_STARTED"
+        "BATCH_BLOCKED",
+        "ORDER_RESERVED",
+        "ORDER_CANCELLED",
+        "ORDER_RUSH_ACCEPTED",
+        "PLAN_REARRANGED",
+        "SHIPMENT_DISPATCHED",
+        "SHIPMENT_RETURNED",
+        "STOCK_RECHANNELLED",
+        "WORK_ATTENDANCE_RECORDED",
+        "WORK_HOURS_SUPPLEMENTED",
+        "WEIGH_IN_RECORDED",
+        "SETTLEMENT_PAID",
+        "RECALL_STARTED",
+        "RECALL_CLOSED",
+        "RISK_FLAG_RAISED"
       ]
     },
     "aggregate_type": {
       "type": "string",
       "enum": [
+        "supplier",
+        "workshop",
         "ingredient_lot",
+        "recipe",
+        "production_shift",
         "production_batch",
         "sales_order",
+        "production_plan",
+        "shipment",
         "worker_settlement"
       ]
     },
@@ -45,12 +79,589 @@
     },
     "version": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "description": "同一聚合内事件从 1 起严格递增。"
     },
     "summary": {
       "type": "string",
       "minLength": 1
+    },
+    "payload": {
+      "type": "object",
+      "description": "事件载荷，结构由事件类型决定，见各 *Payload 定义。"
     }
   },
-  "additionalProperties": true
+
+  "$defs": {
+    "allergen": {
+      "type": "string",
+      "enum": ["花生", "坚果", "蛋", "奶", "小麦麸质", "大豆", "芝麻"],
+      "description": "受控过敏原词表，标签只能引用词表值。"
+    },
+    "ingredient_ref": {
+      "type": "object",
+      "required": ["ingredient", "quantity_kg"],
+      "properties": {
+        "ingredient": { "type": "string", "minLength": 1, "description": "原料名称，如 叉烧、花生仁、瓜子仁。" },
+        "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+        "lot_id": { "type": "string", "description": "生产投料时必须填写实际原料批次号。" }
+      },
+      "additionalProperties": false
+    },
+    "supplier_ref": {
+      "type": "object",
+      "required": ["supplier_id"],
+      "properties": {
+        "supplier_id": { "type": "string", "minLength": 1 },
+        "unit_price": { "type": "number", "minimum": 0, "description": "结算单价属敏感信息，不得进入公开投影。" }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "event_type": { "const": "SUPPLIER_REGISTERED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "supplier" },
+          "payload": {
+            "type": "object",
+            "required": ["name", "village", "supplies"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "village": { "type": "string", "minLength": 1 },
+              "supplies": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+              "bank_account_last4": { "type": "string", "pattern": "^[0-9]{4}$" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "WORKSHOP_QUALIFIED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "workshop" },
+          "payload": {
+            "type": "object",
+            "required": ["name", "qualification_no", "valid_until", "daily_capacity_kg"],
+            "properties": {
+              "name": { "type": "string" },
+              "qualification_no": { "type": "string" },
+              "valid_until": { "type": "string", "format": "date" },
+              "daily_capacity_kg": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "INGREDIENT_LOT_RECEIVED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "ingredient_lot" },
+          "payload": {
+            "type": "object",
+            "required": ["ingredient", "supplier_id", "quantity_kg", "received_on", "shelf_life_days"],
+            "properties": {
+              "ingredient": { "type": "string" },
+              "supplier_id": { "type": "string" },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "received_on": { "type": "string", "format": "date" },
+              "shelf_life_days": { "type": "integer", "minimum": 1 },
+              "unit_price": { "type": "number", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "INGREDIENT_LOT_INSPECTED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "ingredient_lot" },
+          "payload": {
+            "type": "object",
+            "required": ["result", "inspected_at"],
+            "properties": {
+              "result": { "type": "string", "enum": ["合格", "不合格", "让步接收"] },
+              "inspected_at": { "type": "string", "format": "date-time" },
+              "note": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "INGREDIENT_LOT_QUARANTINED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "ingredient_lot" },
+          "payload": {
+            "type": "object",
+            "required": ["reason", "at"],
+            "properties": {
+              "reason": { "type": "string", "minLength": 1 },
+              "at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "RECIPE_VERSION_PUBLISHED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "recipe" },
+          "payload": {
+            "type": "object",
+            "required": ["recipe_name", "recipe_version", "workshop_id", "ingredients", "declared_allergens", "approved", "published_at"],
+            "properties": {
+              "recipe_name": { "type": "string" },
+              "recipe_version": { "type": "integer", "minimum": 1 },
+              "workshop_id": { "type": "string" },
+              "ingredients": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/ingredient_ref" },
+                "minItems": 1
+              },
+              "declared_allergens": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/allergen" },
+                "description": "必须覆盖配方原料引入的全部过敏原；地方配方可不同，但标签按实际声明。"
+              },
+              "approved": { "type": "boolean" },
+              "published_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "PRODUCTION_SHIFT_OPENED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_shift" },
+          "payload": {
+            "type": "object",
+            "required": ["workshop_id", "shift_date", "master_id", "planned_kg"],
+            "properties": {
+              "workshop_id": { "type": "string" },
+              "shift_date": { "type": "string", "format": "date" },
+              "master_id": { "type": "string", "description": "当班师傅，师傅产能是排程约束之一。" },
+              "planned_kg": { "type": "number", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "PRODUCTION_SHIFT_CLOSED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_shift" },
+          "payload": {
+            "type": "object",
+            "required": ["closed_at"],
+            "properties": { "closed_at": { "type": "string", "format": "date-time" } },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "BATCH_PRODUCED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_batch" },
+          "payload": {
+            "type": "object",
+            "required": ["workshop_id", "shift_id", "recipe_id", "recipe_version", "quantity_kg", "produced_at", "best_before", "ingredient_lots"],
+            "properties": {
+              "workshop_id": { "type": "string" },
+              "shift_id": { "type": "string" },
+              "recipe_id": { "type": "string" },
+              "recipe_version": { "type": "integer", "minimum": 1 },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "produced_at": { "type": "string", "format": "date-time" },
+              "best_before": { "type": "string", "format": "date" },
+              "ingredient_lots": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["lot_id", "ingredient", "quantity_kg"],
+                  "properties": {
+                    "lot_id": { "type": "string" },
+                    "ingredient": { "type": "string" },
+                    "quantity_kg": { "type": "number", "exclusiveMinimum": 0 }
+                  },
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "description": "实际投料批次，双向追溯的链边。"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "BATCH_ALLERGEN_LABEL_FIXED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_batch" },
+          "payload": {
+            "type": "object",
+            "required": ["label_allergens", "fixed_at", "recipe_version_snapshot"],
+            "properties": {
+              "label_allergens": { "type": "array", "items": { "$ref": "#/$defs/allergen" }, "minItems": 0 },
+              "fixed_at": { "type": "string", "format": "date-time" },
+              "recipe_version_snapshot": { "type": "integer", "minimum": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "BATCH_RELEASED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_batch" },
+          "payload": {
+            "type": "object",
+            "required": ["released_at"],
+            "properties": {
+              "released_at": { "type": "string", "format": "date-time" },
+              "qr_public_token": { "type": "string", "description": "公开码只指向公开投影，不携带供应户收入。" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "BATCH_BLOCKED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_batch" },
+          "payload": {
+            "type": "object",
+            "required": ["reason", "at"],
+            "properties": {
+              "reason": { "type": "string" },
+              "at": { "type": "string", "format": "date-time" },
+              "recall_id": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "ORDER_RESERVED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "sales_order" },
+          "payload": {
+            "type": "object",
+            "required": ["channel", "quantity_kg", "needed_by", "reserved_batch_id", "reserved_at"],
+            "properties": {
+              "channel": { "type": "string", "enum": ["电商预售", "线下团购", "门店", "临期渠道"] },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "needed_by": { "type": "string", "format": "date" },
+              "reserved_batch_id": { "type": "string" },
+              "reserved_at": { "type": "string", "format": "date-time" },
+              "plan_id": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "ORDER_CANCELLED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "sales_order" },
+          "payload": {
+            "type": "object",
+            "required": ["reason", "cancelled_at", "plan_id"],
+            "properties": {
+              "reason": { "type": "string", "enum": ["预售取消", "客户退单", "质量冻结"] },
+              "cancelled_at": { "type": "string", "format": "date-time" },
+              "plan_id": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "ORDER_RUSH_ACCEPTED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "sales_order" },
+          "payload": {
+            "type": "object",
+            "required": ["quantity_kg", "needed_by", "accepted_at", "plan_id"],
+            "properties": {
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "needed_by": { "type": "string", "format": "date" },
+              "accepted_at": { "type": "string", "format": "date-time" },
+              "plan_id": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "PLAN_REARRANGED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_plan" },
+          "payload": {
+            "type": "object",
+            "required": ["plan_id", "trigger", "rearranged_at", "assignments", "unmet_orders"],
+            "properties": {
+              "plan_id": { "type": "string" },
+              "trigger": { "type": "string", "enum": ["预售取消", "节前加单", "临期转渠道"] },
+              "rearranged_at": { "type": "string", "format": "date-time" },
+              "assignments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["order_id", "batch_id", "quantity_kg"],
+                  "properties": {
+                    "order_id": { "type": "string" },
+                    "batch_id": { "type": "string" },
+                    "quantity_kg": { "type": "number", "exclusiveMinimum": 0 }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "unmet_orders": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "SHIPMENT_DISPATCHED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "shipment" },
+          "payload": {
+            "type": "object",
+            "required": ["order_id", "batch_id", "quantity_kg", "channel", "dispatched_at"],
+            "properties": {
+              "order_id": { "type": "string" },
+              "batch_id": { "type": "string" },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "channel": { "type": "string" },
+              "dispatched_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "SHIPMENT_RETURNED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "shipment" },
+          "payload": {
+            "type": "object",
+            "required": ["order_id", "batch_id", "quantity_kg", "returned_at", "reason"],
+            "properties": {
+              "order_id": { "type": "string" },
+              "batch_id": { "type": "string" },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "returned_at": { "type": "string", "format": "date-time" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "STOCK_RECHANNELLED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_batch" },
+          "payload": {
+            "type": "object",
+            "required": ["batch_id", "quantity_kg", "from_channel", "to_channel", "at"],
+            "properties": {
+              "batch_id": { "type": "string" },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "from_channel": { "type": "string" },
+              "to_channel": { "type": "string", "const": "临期渠道" },
+              "at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "WORK_ATTENDANCE_RECORDED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "worker_settlement" },
+          "payload": {
+            "type": "object",
+            "required": ["worker_id", "shift_id", "hours", "hourly_rate", "recorded_at"],
+            "properties": {
+              "worker_id": { "type": "string" },
+              "shift_id": { "type": "string" },
+              "hours": { "type": "number", "exclusiveMinimum": 0, "maximum": 24 },
+              "hourly_rate": { "type": "number", "minimum": 0 },
+              "recorded_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "WORK_HOURS_SUPPLEMENTED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "worker_settlement" },
+          "payload": {
+            "type": "object",
+            "required": ["worker_id", "shift_id", "hours", "hourly_rate", "supplement_no", "supplemented_at"],
+            "properties": {
+              "worker_id": { "type": "string" },
+              "shift_id": { "type": "string" },
+              "hours": { "type": "number", "exclusiveMinimum": 0, "maximum": 24 },
+              "hourly_rate": { "type": "number", "minimum": 0 },
+              "supplement_no": { "type": "string", "description": "补录单号，幂等键：同一补录只能付一次。" },
+              "supplemented_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "WEIGH_IN_RECORDED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "worker_settlement" },
+          "payload": {
+            "type": "object",
+            "required": ["weigh_no", "supplier_id", "lot_id", "quantity_kg", "unit_price", "weighed_at"],
+            "properties": {
+              "weigh_no": { "type": "string", "description": "线下称重单号，幂等键：补录重复称重不得二次付款。" },
+              "supplier_id": { "type": "string" },
+              "lot_id": { "type": "string" },
+              "quantity_kg": { "type": "number", "exclusiveMinimum": 0 },
+              "unit_price": { "type": "number", "minimum": 0 },
+              "weighed_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "SETTLEMENT_PAID" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "worker_settlement" },
+          "payload": {
+            "type": "object",
+            "required": ["payee_id", "amount", "source_refs", "paid_at"],
+            "properties": {
+              "payee_id": { "type": "string" },
+              "amount": { "type": "number", "minimum": 0 },
+              "source_refs": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1,
+                "description": "被结清的称重单/工时记录/补录单号；每条来源只能出现在一次付款里。"
+              },
+              "paid_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "RECALL_STARTED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "ingredient_lot" },
+          "payload": {
+            "type": "object",
+            "required": ["recall_id", "reason", "started_at", "scope_lot_ids"],
+            "properties": {
+              "recall_id": { "type": "string" },
+              "reason": { "type": "string" },
+              "started_at": { "type": "string", "format": "date-time" },
+              "scope_lot_ids": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1,
+                "description": "触发召回的原料批次；受影响成品由谱系精确推导，不得手工扩大。"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "RECALL_CLOSED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "ingredient_lot" },
+          "payload": {
+            "type": "object",
+            "required": ["recall_id", "closed_at"],
+            "properties": {
+              "recall_id": { "type": "string" },
+              "closed_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "RISK_FLAG_RAISED" } } },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "production_batch" },
+          "payload": {
+            "type": "object",
+            "required": ["kind", "at", "detail"],
+            "properties": {
+              "kind": { "type": "string", "enum": ["缺料", "延期交付", "保质期", "资质到期"] },
+              "at": { "type": "string", "format": "date-time" },
+              "detail": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
 }
