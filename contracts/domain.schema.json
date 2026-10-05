@@ -19,19 +19,37 @@
     "event_type": {
       "type": "string",
       "enum": [
+        "SUPPLIER_REGISTERED",
         "LOT_ACCEPTED",
+        "LOT_INSPECTION_RECORDED",
+        "WEIGHING_RECORDED",
+        "RECIPE_VERSION_PUBLISHED",
+        "WORKSHOP_CERTIFIED",
         "SHIFT_RECORDED",
+        "LABOR_RECORDED",
+        "BATCH_PRODUCED",
         "BATCH_RELEASED",
+        "ORDER_RESERVED",
+        "ORDER_ALLOCATED",
         "ORDER_REALLOCATED",
+        "ORDER_CANCELLED",
+        "RETURN_RECEIVED",
+        "SHIPMENT_DISPATCHED",
+        "SETTLEMENT_PAID",
         "RECALL_STARTED"
       ]
     },
     "aggregate_type": {
       "type": "string",
       "enum": [
+        "supplier",
         "ingredient_lot",
+        "recipe_version",
+        "workshop",
+        "shift",
         "production_batch",
         "sales_order",
+        "shipment",
         "worker_settlement"
       ]
     },
